@@ -8,7 +8,7 @@ A windows service to automatically switch monitors on USB events. Combine with a
 3) Run `Install.bat`
 4) Follow the on-screen instructions in your browser.
 
-X) To uninstall, run `Uninstall.bat`, then optionally remove the folder
+To uninstall, run `Uninstall.bat`, then optionally remove the folder
 
 The service will automatically be started on windows startup.
 
