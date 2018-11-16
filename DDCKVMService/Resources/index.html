@@ -1,0 +1,206 @@
+﻿<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+
+    <title>DDC/CI USB-KVM Setup</title>
+
+    <link rel="stylesheet" href="/pure-min.css">
+
+    <style>
+        hr {
+            margin-top: 1em;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="pure-g" style="margin-top:25px;">
+        <div class="pure-u-1-6"></div>
+        <div class="pure-u-1-2" style="width: 46%; margin-right: 4%;">
+            <h3>DDC/CI-based USB-triggered KVM - Setup</h3>
+            <hr />
+
+            <h4>1.) Display-Source configuration</h4>
+            <p>Select which input source number corresponds to which device on which monitor.</p>
+            <p>The values in "Primary" represent the currently selected input sources (where this service is running). The values below <b>do not</b> represent the currently saved configuration!</p>
+
+            <div id="displayContainer">
+                <h3 id="waitIndicator">Please wait...</h3>
+            </div>
+            <br />
+
+            <button class="pure-button" onclick="save()" disabled>Save</button>
+
+            <hr />
+            <h4>2.) Testing</h4>
+            <p>To test the display configuration, save the config with the button above and then click "Test". <b>This will switch both displays to Secondary config for 10 seconds and then back to Primary.</b></p>
+            <p>If something goes wrong during the test, wait at least 10 seconds and then switch the monitors back to their current configuration using the builtin menu. Afterwards, change the config above and try again.</p>
+
+            <button class="pure-button" onclick="callApi('/test')" disabled>Test</button>
+
+            <hr />
+            <h4>3.) USB Configuration</h4>
+            <p>Click the button below to start the USB calibration. When asked to, plug the device that should trigger the display switch into the "primary" machine where this service is running (or unplug it).</p>
+            <button class="pure-button" onclick="usbProc()" disabled>Calibrate USB</button>
+
+            <b id="usb-notice" style="display:none">Please unplug or plug in your USB device now!</b>
+        </div>
+        <div class="pure-u-1-6">
+            <h3>Table of input sources</h3>
+            <p>NOTE: This does not have to apply to every display depending on manufacturer settings!</p>
+            <table class="pure-table" id="inputSourceTable">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Source</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    <tr><td>1</td><td>Analog (VGA) 1</td></tr>
+                    <tr><td>2</td><td>Analog (VGA) 2</td></tr>
+                    <tr><td>3</td><td>Digital (DVI) 1</td></tr>
+                    <tr><td>4</td><td>Digital (DVI) 2</td></tr>
+                    <tr><td>5</td><td>Composite 1</td></tr>
+                    <tr><td>6</td><td>Composite 2</td></tr>
+                    <tr><td>7</td><td>S-Video 1</td></tr>
+                    <tr><td>8</td><td>S-Video 2</td></tr>
+                    <tr><td>9</td><td>Tuner 1</td></tr>
+                    <tr><td>10</td><td>Tuner 2</td></tr>
+                    <tr><td>11</td><td>Tuner 3</td></tr>
+                    <tr><td>12</td><td>Component/SCART 1</td></tr>
+                    <tr><td>13</td><td>Component/SCART 2</td></tr>
+                    <tr><td>14</td><td>Component/SCART 3</td></tr>
+                    <tr><td>15</td><td>DisplayPort 1</td></tr>
+                    <tr><td>16</td><td>DisplayPort 2</td></tr>
+                    <tr><td>17</td><td>HDMI 1</td></tr>
+                    <tr><td>18</td><td>HDMI 2</td></tr>
+                    <tr><td>>18</td><td>Unspecified</td></tr>
+                </tbody>
+            </table>
+            <p style="font-size: 75%">According to the <a href="https://milek7.pl/ddcbacklight/mccs.pdf" target="_blank">MCCS v2.2a spec</a></p>
+        </div>
+        <div class="pure-u-1-6"></div>
+    </div>
+
+    <script src="/jquery-3.3.1.min.js" type="text/javascript"></script>
+    <script>
+        const elemTemplate = "<p>&nbsp;&nbsp;#<span class='display-nr'></span>&nbsp;<b class='display-name'></b>&nbsp;Primary:&nbsp;<select class='display-select-primary'></select>&nbsp;Secondary:&nbsp;<select class='display-select-secondary'></select></p>";
+
+        $(function () {
+            window.enableUSBtext = function (show, timeout) {
+                setTimeout(function () {
+                    if (show) {
+                        $("#usb-notice").show();
+                    } else {
+                        $("#usb-notice").hide();
+                    }
+                }, timeout);
+            };
+
+            window.callApi = function (endpoint, callback) {
+                $("button").prop("disabled", true);
+                $.getJSON(endpoint).always(function () {
+                    $("button").prop("disabled", false);
+                    enableUSBtext(false, 0);
+                }).fail(function (_, err) {
+                    alert("An error occured: " + err);
+                }).done(callback);
+            };
+
+            window.usbProc = function () {
+                enableUSBtext(true, 500); // Allow some time to pass for service to set up USB handlers
+                callApi('/usb', function (data) {
+                    alert("USB trigger-device was successfully set to: " + data.usb);
+                });
+            };
+
+            window.save = function () {
+                $("button").prop("disabled", true);
+
+                // Construct data
+                var ds = [];
+                $("#displayContainer p").each(function () {
+                    var p = $(this);
+                    var display = {
+                        nr: p.find(".display-nr").text(),
+                        primarySource: p.find(".display-select-primary").val(),
+                        secondarySource: p.find(".display-select-secondary").val()
+                    };
+                    ds.push(display);
+                });
+
+                $.post("/save", JSON.stringify({
+                    // Data to save
+                    displays: ds
+                })).fail(function (_, err) {
+                    alert("An error occured while saving: " + err);
+                }).always(function () {
+                    $("button").prop("disabled", false);
+                }).done(function () {
+                    alert("Saved successfully!");
+                });
+            };
+
+            window.updateTableBoldness = function (available) {
+                var unbold = function (elem) {
+                    var e = $(elem);
+                    if (e.find("b").length > 0) {
+                        e.text(e.find("b").text());
+                        e.find("b").remove();
+                    }
+                };
+
+                var bold = function (elem) {
+                    var e = $(elem).next();
+                    e.html("<b>" + e.text() + "</b>");
+                };
+
+                $("#inputSourceTable td").each(function () { unbold(this); });
+                $("#inputSourceTable td").each(function () {
+                    var e = $(this);
+                    if (available.filter(function (el) { return el == e.text(); }).length > 0) {
+                        bold(this);
+                    }
+                });
+            };
+
+            // Load displays from service
+            $.getJSON("/enum").done(function (data) {
+                var availableSources = [];
+
+                $.each(data.displays, function () {
+                    var dis = this;
+                    var elem = $(elemTemplate);
+                    elem.find(".display-nr").text(dis.nr);
+                    elem.find(".display-name").text(dis.name);
+                    $.each(dis.sources, function () {
+                        var src = this;
+                        elem.find(".display-select-primary").append("<option>" + src + "</option>");
+                        elem.find(".display-select-secondary").append("<option>" + src + "</option>");
+
+                        availableSources.push(src);
+                    });
+
+                    elem.find(".display-select-primary").val(this.currentSource);
+                    elem.find(".display-select-secondary")[0].selectedIndex = 0;
+                    while ($(elem.find(".display-select-secondary")[0]).val() == this.currentSource) {
+                        elem.find(".display-select-secondary")[0].selectedIndex++;
+                    }
+
+                    $("#displayContainer").append(elem);
+                });
+
+                window.updateTableBoldness(availableSources);
+            }).always(function () {
+                $("#waitIndicator").remove();
+                $("button").prop("disabled", false);
+            });
+        });
+    </script>
+</body>
+</html>
